@@ -1,0 +1,107 @@
+---
+title: "Prediction Assignment Writeup"
+output: html_document
+---
+
+##Introductions
+
+In this assignment, it is required to predict the types of activities for 6 participants 
+using the accelerometers measurements on the belt, forearm, arm, and dumbell. Six machine
+learning algorithms from Caret package are compared with k-fold cross validation method. The model 
+results with the largest accuary is chosen as the optimal model for testing set prediction. 
+Note: The dataset used in the assignment is from this source: http://groupware.les.inf.puc-rio.br/har
+
+##Load packages and datasets
+```{r,echo=TRUE}
+library(ggplot2)
+library(lattice)
+library(caret)
+library(randomForest)
+library(MASS)
+library(kernlab)
+library(klaR)
+library(rpart)
+library(gbm)
+
+fileURL<- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(fileURL,"pml-training.csv")
+fileURL<- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(fileURL,"pml-testing.csv")
+pretraining <- read.csv("pml-training.csv")
+pretesting <- read.csv("pml-testing.csv")
+```
+
+##Extract accelerometer related variables and plot preliminary figures
+```{r,echo=TRUE}
+#Extract data from accelerometers
+index1 <- grepl("accel",names(pretraining))
+index2<- grepl("var_",names(pretraining))
+index <- index1 & (!index2)
+index[length(index)] <- TRUE
+training <- pretraining[,index]  #Training with variable from accelerometer
+testing <- pretesting[,index]    #Testing with variable from accelerometer
+
+#Plots for accelerometer from belt
+g=ggplot(data=training,aes(y=total_accel_belt,x=classe,fill=classe))
+g=g+geom_violin(colour="black",size=2)
+g=g+xlab("Types of activities")+ylab("Total acceleration for belt")
+g
+
+#From the violin plot, it can be seen that total acceleration distribution from belt 
+#is not changing too much for A-D activities. E is different from others.
+
+#Plot the x and z acceleration
+par(mfrow=c(1,2))
+plot(training$accel_belt_x,col=training$classe,ylab="x acceleration for belt")
+legend("bottomleft",horiz=TRUE,legend=unique(training$classe),col=unique(training$classe),pch=1)
+
+plot(training$accel_belt_z,col=training$classe,ylab="z acceleration for belt")
+legend("bottomleft",horiz=TRUE,legend=unique(training$classe),col=unique(training$classe),pch=1)
+
+#In these two figures, x and z acceleration distribution for activities D and E are different for A-C
+#More advanced machine learning algorithms are needed to classied these activities.
+```
+
+## Cross validation using k-fold method
+
+Since the test set is used as the validation of the developed machine learning model. The out of sample error 
+needs to be estimated using the training set. In that case, the training set is splitted into training and testing sets 
+using k-fold cross validation. In this study, the value of k is chosen to be 10 to balance the bias and variance. 
+
+## Models selection with the minimum out of sample error
+
+Five machine learning algorithms which are Random Forest, Linear Distriminant Analysis, Support Vector Machine, Classification Tree, and Boosting with Trees are chosen as candidate models.The accuracy from each model results is considered as a measure of out of sample error. The model with the largest accuracy will be chosen as optimal model for true testing set set prediction. 
+
+```{r,echo=TRUE}
+methods <- c("rf","lda","svmLinear","rpart","gbm")  #Several machine learning algorithms
+nameM <- c("Random Forest","Linear Discriminant Analysis","SVM","Classification Tree","Boosting with Trees")
+
+#Run Random Forest seperately
+model1 <- train(classe~.,data=training,trControl = trainControl(method="cv",number=10),method=methods[1])
+print("The accuracy from Random Forest is")
+print(max(model1$results[,"Accuracy"]))
+
+#Run three models together
+for (i in 2:4) {
+    model <- train(classe~.,data=training,trControl = trainControl(method="cv",number=10),method=methods[i])
+    print(paste0("The accuracy from ",nameM[i]," is:"))
+    print(max(model$results[,"Accuracy"]))
+}
+#Run Boosting with Trees seperately
+model <- train(classe~.,data=training,trControl=trainControl(method="cv",number=10),method=methods[5],verbose=FALSE)
+print("The accuracy from Boosting with Trees is")
+print(max(model$results[,"Accuracy"]))
+```
+
+By comparing the results above, it can be seen that the Random Forest algorithm can achieve the highest
+accuracy. Therefore, it is used as the optimal model for testing set prediction.
+
+## Testing set prediction
+```{r,echo=TRUE}
+#Predict the testing set using Random Forest
+#Row is the predicted activity type, column is problem id
+table(predict(model1,testing),testing$problem_id)
+```
+
+
+
